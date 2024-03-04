@@ -76,7 +76,7 @@ func EditUserData(c *gin.Context) {
 		dbUser.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/user/" + oldImagePath)
+			err := os.Remove("images/users/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}
@@ -215,7 +215,7 @@ func EditUserDataByID(c *gin.Context) {
 		dbUser.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/user/" + oldImagePath)
+			err := os.Remove("images/users/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}

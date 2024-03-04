@@ -80,7 +80,7 @@ func EditTag(c *gin.Context) {
 		dbTag.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/tag/" + oldImagePath)
+			err := os.Remove("images/tags/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}
