@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -30,12 +31,15 @@ func UserData(c *gin.Context) {
 		return
 	}
 
+	baseURL := os.Getenv("BASE_URL")
+
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
 			"ID":    user.ID,
 			"Email": user.Email,
 			"Name":  user.Name,
 			"Admin": user.Admin,
+			"Image": baseURL + "image/user/" + user.Image,
 			"Tags":  user.Tags,
 		},
 	})
@@ -72,7 +76,7 @@ func EditUserData(c *gin.Context) {
 		dbUser.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/users/" + oldImagePath)
+			err := os.Remove("images/user/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}
@@ -108,19 +112,76 @@ func EditUserData(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
 	}
+	baseURL := os.Getenv("BASE_URL")
+
+	dbUser.Image = baseURL + "image/user/" + dbUser.Image
 
 	c.JSON(http.StatusOK, dbUser)
 }
 
 // Retrieves all users data
 func UsersData(c *gin.Context) {
-	var users []map[string]interface{}
-	if err := initializers.DB.Model(&models.User{}).Select("id, name, email, admin").Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+
+	var users []models.User
+	var totalUsersCount int64
+	var err error
+	offset := (page - 1) * pageSize
+
+	query := c.Query("q")
+	db := initializers.DB.Model(&models.User{})
+
+	// Apply search criteria if query is provided
+	if query != "" {
+		db = db.Where("name LIKE ? OR email LIKE ?", "%"+query+"%", "%"+query+"%")
+	}
+
+	// Count total users matching the search criteria
+	if err = db.Count(&totalUsersCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
 		return
 	}
 
-	c.JSON(http.StatusOK, users)
+	// Fetch users with pagination and preload their tags
+	if err = db.Preload("Tags").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+
+	// Load base URL from environment variable
+	baseURL := os.Getenv("BASE_URL")
+
+	// Customize the user data for response
+	var responseData []gin.H
+	for _, user := range users {
+		var tagsData []gin.H
+		for _, tag := range user.Tags {
+			tagsData = append(tagsData, gin.H{
+				"id":    tag.ID,
+				"name":  tag.Name,
+				"image": baseURL + "image/tag/" + tag.Image,
+			})
+		}
+		userData := gin.H{
+			"id":    user.ID,
+			"name":  user.Name,
+			"email": user.Email,
+			"image": baseURL + "image/user/" + user.Image,
+			"admin": user.Admin,
+			"tags":  tagsData,
+		}
+		responseData = append(responseData, userData)
+	}
+
+	pagination := gin.H{
+		"total_items":  totalUsersCount,
+		"total_pages":  int(math.Ceil(float64(totalUsersCount) / float64(pageSize))),
+		"current_page": page,
+		"page_size":    pageSize,
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": responseData, "pagination": pagination})
 }
 
 func EditUserDataByID(c *gin.Context) {
@@ -154,7 +215,7 @@ func EditUserDataByID(c *gin.Context) {
 		dbUser.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/users/" + oldImagePath)
+			err := os.Remove("images/user/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}
@@ -196,6 +257,9 @@ func EditUserDataByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
 	}
+	baseURL := os.Getenv("BASE_URL")
+
+	dbUser.Image = baseURL + "image/user/" + dbUser.Image
 
 	c.JSON(http.StatusOK, dbUser)
 }

@@ -80,7 +80,7 @@ func EditTag(c *gin.Context) {
 		dbTag.Image = filename
 
 		if oldImagePath != "" {
-			err := os.Remove("images/tags/" + oldImagePath)
+			err := os.Remove("images/tag/" + oldImagePath)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, err.Error())
 			}
@@ -104,6 +104,10 @@ func EditTag(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tag"})
 		return
 	}
+
+	baseURL := os.Getenv("BASE_URL")
+
+	dbTag.Image = baseURL + "image/tag/" + dbTag.Image
 
 	c.JSON(http.StatusOK, dbTag)
 }
@@ -150,7 +154,9 @@ func AddTagToUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dbUser)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Tag added to user successfully",
+	})
 }
 
 // Retrieve essential user data using the UserSummary struct.
@@ -158,6 +164,7 @@ type UserSummary struct {
 	ID    uint   `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"Email"`
+	Image string `json:"Image"`
 }
 
 // Retrieves all tags from the database with pagination
@@ -165,6 +172,7 @@ func GetAllTags(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	sort := c.DefaultQuery("sort", "asc")
+	query := c.Query("q")
 
 	if sort != "asc" && sort != "desc" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid sort order"})
@@ -172,7 +180,15 @@ func GetAllTags(c *gin.Context) {
 	}
 
 	var totalTagsCount int64
-	if err := initializers.DB.Model(&models.Tag{}).Count(&totalTagsCount).Error; err != nil {
+	var err error
+	db := initializers.DB.Model(&models.Tag{})
+
+	// Apply search criteria if query is provided
+	if query != "" {
+		db = db.Where("name LIKE ?", "%"+query+"%")
+	}
+
+	if err = db.Count(&totalTagsCount).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tags"})
 		return
 	}
@@ -180,18 +196,25 @@ func GetAllTags(c *gin.Context) {
 	offset := (page - 1) * pageSize
 
 	var tags []models.Tag
-	query := initializers.DB.Preload("Users").Offset(offset).Limit(pageSize)
-	if sort == "asc" {
-		query = query.Order("name asc")
-	} else {
-		query = query.Order("name desc")
+	dbQuery := initializers.DB.Preload("Users").Offset(offset).Limit(pageSize)
+
+	if query != "" {
+		dbQuery = dbQuery.Where("name LIKE ?", "%"+query+"%")
 	}
-	if err := query.Find(&tags).Error; err != nil {
+
+	if sort == "asc" {
+		dbQuery = dbQuery.Order("name asc")
+	} else {
+		dbQuery = dbQuery.Order("name desc")
+	}
+
+	if err = dbQuery.Find(&tags).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tags"})
 		return
 	}
 
 	var tagData []gin.H
+	baseURL := os.Getenv("BASE_URL")
 
 	for _, tag := range tags {
 		var userSummaries []UserSummary
@@ -200,11 +223,13 @@ func GetAllTags(c *gin.Context) {
 				ID:    user.ID,
 				Name:  user.Name,
 				Email: user.Email,
+				Image: baseURL + "image/user/" + user.Image,
 			})
 		}
 		tagData = append(tagData, gin.H{
 			"id":    tag.ID,
 			"name":  tag.Name,
+			"image": baseURL + "image/tag/" + tag.Image,
 			"users": userSummaries,
 		})
 	}

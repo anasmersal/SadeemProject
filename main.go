@@ -28,7 +28,8 @@ func main() {
 	r.PATCH("/tag/edit/:id", middleware.RequireAuth, middleware.RequireAdmin(), controllers.EditTag)
 	r.POST("/user/tag/:id", middleware.RequireAuth, middleware.RequireAdmin(), controllers.AddTagToUser)
 
-	r.GET("/search", middleware.RequireAuth, controllers.Search)
+	r.Static("/image/user", "./images/users")
+	r.Static("/image/tag", "./images/tags")
 
 	r.Run()
 }
